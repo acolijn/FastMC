@@ -3,7 +3,7 @@ import numpy as np
 class em_physics:
     """
     The electromagnetic physics driver for the simulation
-    (routines routinely stole from https://github.com/ErikHogebirk/DMPlots)
+    (routines routinely stole from https://github.com/ErikHogebirk/DMPlots)555555
     """
 
     def __init__(self, **kwargs):

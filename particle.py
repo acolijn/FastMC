@@ -7,7 +7,7 @@ class particle:
         Initialize a particle
         :param kwargs:
             type = particle specimen (value = gamma, <others defined later>)
-            energy = energy of the particle
+            energy = energy of the particle in keV
         """
         print("particle::initialize")
 
@@ -122,20 +122,18 @@ class particle:
 
         return
 
-    def propagate(self):
+    def propagate(self, phys):
         """
         Propagate the particle to the next interaction location
-
+        :param phys: physics class object
         :return:
         """
-
         # cdf for path length
-        mu = 1
+        mu = phys.get_att(E=self.energy)
         r = np.random.uniform(0,1)
-        L =  - np.log(1-r) / mu
+        L =  - np.log(1-r) * mu
 
-
-        return
+        return L
 
     def scatter(self):
         """
