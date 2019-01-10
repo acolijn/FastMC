@@ -82,8 +82,8 @@ class em_physics:
             E=energy of gamma in keV
         :return: attenuation length in cm
         """
-        energy = kwargs.pop('E',-1.0)
+        energy = kwargs.pop('energy',-1.0)
 
-        mu = np.interp(energy * 1e3, self.e, self.sigma_att)
+        mu = np.interp(energy / 1e3, self.e, self.sigma_att)
         return 1/ ( mu * self.rho)
 

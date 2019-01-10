@@ -129,7 +129,7 @@ class particle:
         :return:
         """
         # cdf for path length
-        mu = phys.get_att(E=self.energy)
+        mu = phys.get_att(energy=self.energy)
         r = np.random.uniform(0,1)
         L =  - np.log(1-r) * mu
 
@@ -140,5 +140,13 @@ class particle:
 
         :return:
         """
+
+        # select the scatter process
+
+        # select the scatter angle
+
+        # recalculate the new particle direction
+
+        # calculate teh energy deposit in the xenon
 
         return
