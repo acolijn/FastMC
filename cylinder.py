@@ -2,7 +2,13 @@ import numpy as np
 
 class cylinder:
     def __init__(self, **kwargs):
+        """
+        Initialize a cylinder
 
+        :param kwargs: R = radius,
+                       h = height
+
+        """
         self.radius = kwargs.pop('R',-1.0)
         self.height = kwargs.pop('h',-1.0)
 
@@ -29,9 +35,11 @@ class cylinder:
 
 
     def generate_point(self):
-        #
-        # generate a point at a random location on the cylinder
-        #
+        """
+        Generate a point at a random location on the cylinder
+
+        :return:
+        """
         xyz = np.zeros(3)
         # decide on which cylinder surface to generate a hit
         r = np.random.uniform(0.0,1.0)
