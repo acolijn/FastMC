@@ -17,6 +17,7 @@ class particle:
         self.x0 = np.zeros(3)
         self.direction = np.zeros(3)
 
+
     def generate(self, cylinder):
         """
         Generate the starting point of the particle and its direction
