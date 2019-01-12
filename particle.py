@@ -13,19 +13,22 @@ class particle:
 
         self.type = kwargs.pop('type', None)
         self.energy = kwargs.pop('energy', 0.0)
+        self.phys = kwargs.pop('physics',None)
+        self.cryostat = kwargs.pop('geometry',None)
+        self.fiducial = kwargs.pop('ficucial',None)
 
         self.x0 = np.zeros(3)
         self.direction = np.zeros(3)
 
 
-    def generate(self, cylinder):
+    def generate(self):
         """
         Generate the starting point of the particle and its direction
-        :param cylinder:
+        :param:
         :return:
         """
         # generate x0 and direction of the particle
-        self.x0 = cylinder.generate_point()['x']
+        self.x0 = self.cryostat.generate_point()['x']
 
         #
         cost = np.random.uniform(-1, 1)
@@ -50,24 +53,28 @@ class particle:
         2=particle hits the cylinder at two spots
 
         """
-        self.intersections = pd.DataFrame()
+        intersections = pd.DataFrame()
 
         # routines below can only be called if self.intersections is defined above
-        self.intersect_with_plane(cylinder, type='top')
-        self.intersect_with_plane(cylinder, type='bot')
-        self.intersect_with_side(cylinder)
+        intersections = intersections.append(self.intersect_with_plane(cylinder, type='top'))
+        intersections = intersections.append(self.intersect_with_plane(cylinder, type='bot'))
+        intersections = intersections.append(self.intersect_with_side(cylinder))
 
-        self.intersections = self.intersections.sort_values('s')
-        print(self.intersections)
+        intersections = intersections.sort_values('s')
+        intersections = intersections.reset_index(drop=True)
 
-        return len(self.intersections)
+        # print(self.intersections)
+
+        return intersections
 
     def intersect_with_side(self, cylinder):
         """
         Intersect the particle with the cylinder shell
         :param cylinder:
-        :return:
+        :return: intersections
         """
+
+        intersections = pd.DataFrame()
 
         A = self.direction[0] ** 2 + self.direction[1] ** 2
         B = 2 * (self.x0[0] * self.direction[0] + self.x0[1] * self.direction[1])
@@ -82,9 +89,9 @@ class particle:
                 # is it hitting the cylinder? or is it outside?
                 if (np.abs(xint[2]) < cylinder.height/2) & (s>-1e-5): # only tracks with positive pathlength, but allow for numerical -0.0000
                     # good intersection..... add to the list
-                    self.intersections = self.intersections.append({'x': xint, 's': s}, ignore_index=True)
+                    intersections = intersections.append({'x': xint, 's': s}, ignore_index=True)
 
-        return
+        return intersections
 
     def intersect_with_plane(self, cylinder, **kwargs):
         """
@@ -92,8 +99,9 @@ class particle:
         :param cylinder:
         :param kwargs:
 
-        :return:
+        :return: intersections
         """
+        intersections = pd.DataFrame()
 
         type = kwargs.pop('type', None)
 
@@ -119,18 +127,35 @@ class particle:
         r = np.sqrt(x[0] ** 2 + x[1] ** 2)
         if (r < cylinder.radius) & (s>-1e-5): # only tracks with positive pathlength, but allow for numerical -0.0000
             # good intersection.... add to the list
-            self.intersections = self.intersections.append({'x': x, 's': s}, ignore_index=True)
+            intersections = intersections.append({'x': x, 's': s}, ignore_index=True)
 
-        return
+        return intersections
 
-    def propagate(self, phys):
+    def propagate(self):
+        """
+        Propagate the particle
+        :return:
+        """
+
+        # 1. check if the particle moves through the xenon
+        intersections = self.intersect(self.cryostat)
+        if len(intersections) == 2: # we have tracks through the LXe
+            # maximum path length
+            s_max = intersections['s'][1]
+            s_gen = self.generate_interaction_point()
+
+            print("s_gen = ",s_gen,"s_max =",s_max)
+            if(s_gen < s_max): # we have a hit inside the xenon
+                self.scatter()
+
+    def generate_interaction_point(self):
         """
         Propagate the particle to the next interaction location
         :param phys: physics class object
         :return:
         """
         # cdf for path length
-        mu = phys.get_att(energy=self.energy)
+        mu = self.phys.get_att(energy=self.energy)
         r = np.random.uniform(0,1)
         L =  - np.log(1-r) * mu
 
@@ -143,11 +168,40 @@ class particle:
         """
 
         # select the scatter process
+        process = self.select_scatter_process()
 
-        # select the scatter angle
+        if process == 'inc':
+            print('Compton scatter - continue')
+            # select the scatter angle
 
-        # recalculate the new particle direction
+            # recalculate the new particle direction
 
-        # calculate teh energy deposit in the xenon
+            # calculate teh energy deposit in the xenon
+        else:
+            # particle is fully absorbed
+            print('PE absoprtion - end particle')
 
         return
+
+    def select_scatter_process(self):
+        """
+
+        :return:
+        """
+
+        # get the gamma energy
+        E = self.energy
+        # if we deal with Compton we will scatter, otherwise full absorption (not completely true, but I dont want to deal with pair creation)
+        sigma_total = self.phys.get_sigma(process='att',energy=E)
+        sigma_inc = self.phys.get_sigma(process='inc',energy=E)
+        frac = sigma_inc / sigma_total
+
+        r = np.random.uniform(0,1)
+        print('stot = ',sigma_total,' sinc = ',sigma_inc,' frac = ',frac,' r= ',r)
+        if r < frac:
+            process = 'inc'
+        else:
+            process = 'pho'
+
+        return process
+

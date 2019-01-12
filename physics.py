@@ -111,12 +111,15 @@ class em_physics:
                  "pho" = PE absorption,
                  "inc" = incoherent scatter - Compton,
                  "pp"  = pair creation
-        E=energy of gamma in keV,
+        energy=energy of gamma in keV,
 
         :return: cross section in cm2/g
         """
         process = kwargs.pop('process','att')
-        energy = kwargs.pop('E',-1.0)
+        energy = kwargs.pop('energy',-1.0)
+        if energy<0:
+            print('emphysics::get_sigma ERROR wrong energy. E=',energy)
+            return -1
 
         if process == "att":  # total cross section
             mu = np.interp(energy / 1e3, self.e, self.sigma_att)

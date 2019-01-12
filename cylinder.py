@@ -16,6 +16,8 @@ class cylinder:
             print("cylinder::__init__ ERROR. Bad radius and/or height of cylinder")
             print("cylinder::__init__    r = ",self.radius," h = ",self.height)
             return
+        else:
+            print("cylinder::__init__ Define cylinder with R=",self.radius," and height=",self.height)
 
         #.
         # Calculate the area of teh cylinder side, top and bottom
