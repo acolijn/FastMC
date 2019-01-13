@@ -197,3 +197,25 @@ class em_physics:
         :return: S(x)
         """
         return np.interp(x,self.x,self.Sx)
+
+    def do_compton(self, energy):
+        # select the scatter angle
+
+        #
+        # make the cdf from the differential cross section
+        #
+        cost_range = np.linspace(-1.0, +1.0, 10001, endpoint=True)
+        dsigma = self.KleinNishina(energy, cost_range,formfactor=True)
+        cdf = dsigma.cumsum() / dsigma.sum()
+        #
+        # draw a random number from the dsigma distribution to get scatter angle
+        #
+        theta = np.arccos(np.interp(np.random.uniform(0., 1.), cdf, cost_range))
+        #
+        # random angle in phi between 0 and 2pi
+        #
+        phi = 2 * np.pi * np.random.uniform(0.1)
+
+        return theta, phi
+
+
