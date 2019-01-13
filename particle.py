@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
 
+from numba import jit
+
 class particle:
+    #@jit()
+
     def __init__(self, **kwargs):
         """
         Initialize a particle
@@ -9,7 +13,7 @@ class particle:
             type = particle specimen (value = gamma, <others defined later>)
             energy = energy of the particle in keV
         """
-        print("particle::initialize")
+        # # # print("particle::initialize")
 
         self.type = kwargs.pop('type', None)
         self.energy = kwargs.pop('energy', 0.0)
@@ -20,6 +24,8 @@ class particle:
         self.x0 = np.zeros(3)
         self.direction = np.zeros(3)
 
+        # generate the x0 and direction of the particle
+        self.generate()
 
     def generate(self):
         """
@@ -53,32 +59,34 @@ class particle:
         2=particle hits the cylinder at two spots
 
         """
-        intersections = pd.DataFrame()
-
-        # routines below can only be called if self.intersections is defined above
-        intersections = intersections.append(self.intersect_with_plane(cylinder, type='top'))
-        intersections = intersections.append(self.intersect_with_plane(cylinder, type='bot'))
-        intersections = intersections.append(self.intersect_with_side(cylinder))
-
-        intersections = intersections.sort_values('s')
-        intersections = intersections.reset_index(drop=True)
-
-        # print(self.intersections)
+        stop = self.intersect_with_plane(cylinder, 'top')
+        sbot = self.intersect_with_plane(cylinder, 'bot')
+        ssid = self.intersect_with_side(cylinder)
+        # sort the list by ascending order....
+        intersections = sorted([stop,sbot,ssid[0],ssid[1]],reverse=False)
+        # remove s=0 entries
+        for i in range(4):
+            try:
+                intersections.remove(0.)
+            except:
+                pass
 
         return intersections
 
     def intersect_with_side(self, cylinder):
         """
         Intersect the particle with the cylinder shell
-        :param cylinder:
+        :param R,h:
         :return: intersections
         """
 
-        intersections = pd.DataFrame()
+        intersections = [0,0]
+        n = 0
 
         A = self.direction[0] ** 2 + self.direction[1] ** 2
         B = 2 * (self.x0[0] * self.direction[0] + self.x0[1] * self.direction[1])
         C = self.x0[0] ** 2 + self.x0[1] ** 2 - cylinder.radius ** 2
+        #C = self.x0[0] ** 2 + self.x0[1] ** 2 - R ** 2
 
         discriminant = B ** 2 - 4 * A * C
 
@@ -87,33 +95,35 @@ class particle:
                 s = (-B + sign*np.sqrt(discriminant)) / (2 * A)
                 xint = self.x0 + s * self.direction
                 # is it hitting the cylinder? or is it outside?
-                if (np.abs(xint[2]) < cylinder.height/2) & (s>-1e-5): # only tracks with positive pathlength, but allow for numerical -0.0000
+                if (np.abs(xint[2]) < cylinder.height/2) & (s>1e-5): # only tracks with positive pathlength, remove intersect with zero pathlength
+                #if (np.abs(xint[2]) < h / 2) & (s > 1e-5):  # only tracks with positive pathlength, remove intersect with zero pathlength
                     # good intersection..... add to the list
-                    intersections = intersections.append({'x': xint, 's': s}, ignore_index=True)
-
+                    #intersections = intersections.append({'x': xint, 's': s}, ignore_index=True)
+                    intersections[n] = s
+                    n = n+1
         return intersections
 
-    def intersect_with_plane(self, cylinder, **kwargs):
+    def intersect_with_plane(self, cylinder, type):
         """
         Intersect the particle track with the top/bottom plane
-        :param cylinder:
-        :param kwargs:
+        :param R,h,type:
 
-        :return: intersections
+        :return: s
         """
-        intersections = pd.DataFrame()
-
-        type = kwargs.pop('type', None)
+        sint = 0
 
         zint = 0
         if type == "top":  # top plane
             zint = cylinder.height / 2
+            #zint = h / 2
         else:  # bottom plane
             zint = -cylinder.height / 2
+            #zint = -h / 2
+
 
         tz = self.direction[2]
 
-        # calculate the path length to teh intersection point
+        # calculate the path length to the intersection point
         if tz != 0.000:
             s = (zint - self.x0[2]) / tz
         else:
@@ -125,29 +135,36 @@ class particle:
 
         # calculate the radius  of teh intersect and check whether it is in range
         r = np.sqrt(x[0] ** 2 + x[1] ** 2)
-        if (r < cylinder.radius) & (s>-1e-5): # only tracks with positive pathlength, but allow for numerical -0.0000
+        if (r < cylinder.radius) & (s>1e-5): #  only tracks with positive pathlength, remove intersect with zero pathlength
+        #if (r < R) & (s > 1e-5):  # only tracks with positive pathlength, remove intersect with zero pathlength
             # good intersection.... add to the list
-            intersections = intersections.append({'x': x, 's': s}, ignore_index=True)
+            sint = s
 
-        return intersections
+        return sint
 
     def propagate(self):
         """
         Propagate the particle
         :return:
         """
+        cost = -1.5
 
         # 1. check if the particle moves through the xenon
         intersections = self.intersect(self.cryostat)
-        if len(intersections) == 2: # we have tracks through the LXe
-            # maximum path length
-            s_max = intersections['s'][1]
+
+        if len(intersections) >= 1: # we have a track through the LXe cylinder.
+            # 1. if one intersection this gives the exit point.
+            # 2. if two intersection this gives the entry point to a new volume (needed for fiducial)
+            #    volume variance reduction
+            s_max = intersections[0]
             s_gen = self.generate_interaction_point()
-
-            print("s_gen = ",s_gen,"s_max =",s_max)
+            # print("s_gen = ",s_gen,"s_max =",s_max)
             if(s_gen < s_max): # we have a hit inside the xenon
-                self.scatter()
+               cost = self.scatter()
+            # cost = 1
+        return cost
 
+    @jit()
     def generate_interaction_point(self):
         """
         Propagate the particle to the next interaction location
@@ -161,6 +178,7 @@ class particle:
 
         return L
 
+    @jit()
     def scatter(self):
         """
 
@@ -170,19 +188,32 @@ class particle:
         # select the scatter process
         process = self.select_scatter_process()
 
+        cost = -1.5
         if process == 'inc':
-            print('Compton scatter - continue')
+            # # #print('Compton scatter - continue')
             # select the scatter angle
 
+            # make the cdf from the differential cross section
+            cost_range = np.arange(-1.0,+1.0,0.01)
+            dsigma = self.phys.KleinNishina(self.energy,cost_range)
+            cdf = dsigma.cumsum()/dsigma.sum()
+            # draw a random number from the dsigma distribution
+            cost = np.interp(np.random.uniform(0.,1.), cdf, cost_range)
+
+            # calculate the rotation matrix
+
             # recalculate the new particle direction
+
 
             # calculate teh energy deposit in the xenon
         else:
             # particle is fully absorbed
-            print('PE absoprtion - end particle')
+            # # #print('PE absoprtion - end particle')
+            i=0
 
-        return
+        return cost
 
+    @jit()
     def select_scatter_process(self):
         """
 
@@ -197,7 +228,7 @@ class particle:
         frac = sigma_inc / sigma_total
 
         r = np.random.uniform(0,1)
-        print('stot = ',sigma_total,' sinc = ',sigma_inc,' frac = ',frac,' r= ',r)
+        # # # print('stot = ',sigma_total,' sinc = ',sigma_inc,' frac = ',frac,' r= ',r)
         if r < frac:
             process = 'inc'
         else:

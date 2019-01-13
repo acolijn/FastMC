@@ -1,6 +1,7 @@
 import numpy as np
 
 class cylinder:
+
     def __init__(self, **kwargs):
         """
         Initialize a cylinder
