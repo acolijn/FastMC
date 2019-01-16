@@ -12,6 +12,13 @@ class particle:
         :param kwargs:
             type = particle specimen (value = gamma, <others defined later>)
             energy = energy of the particle in keV
+            phys = physics class
+            geometry = geometry description. Instant of cylinder class
+            fiducial  = fiducial volume. Instant of cylinder class
+            vrt = variance reduction technique. Values: [None, "fiducial_scatter"]
+            nscatter_max = maximum number of scatters (only when vrt<>None)
+            edep_max = maximum energy deposit in the xenon (keV)
+            debug = show debug printout information [Default = False]
         """
         # # # print("particle::initialize")
 
@@ -19,7 +26,26 @@ class particle:
         self.energy = kwargs.pop('energy', 0.0)
         self.phys = kwargs.pop('physics',None)
         self.cryostat = kwargs.pop('geometry',None)
-        self.fiducial = kwargs.pop('ficucial',None)
+        self.fiducial = kwargs.pop('fiducial',None)
+        self.debug = kwargs.pop('debug',False)
+
+        #
+        # vrt = variance reduction technique
+        #
+        self.vrt = kwargs.pop('vrt', None)
+        #
+        # default number of scatters = 1 (only with vrt<>None)
+        #
+        self.nscatter_max = kwargs.pop('nscatter_max',1)
+        self.edep_max = kwargs.pop('edep_max',100000.)
+
+        #
+        # Particle weight. Will be reduced when using VRT methods
+        #
+        self.weight = 1.0
+
+        if self.debug == True:
+            print('particle::propagate VRT:',self.vrt)
 
         self.x0 = np.zeros(3)
         self.x0start = np.zeros(3)
@@ -42,8 +68,10 @@ class particle:
         print("particle::print origin = ",self.x0," cm")
         print("particle::print direction = ",self.direction)
         print("particle::print deposited energy = ",self.edep," keV")
-
-
+        print("particle::print")
+        print("particle::print variance reduction = ",self.vrt)
+        print("particle::print n scatter max = ",self.nscatter_max)
+        print("particle::print e deposit max = ",self.edep_max)
 
     def generate(self):
         """
@@ -194,22 +222,71 @@ class particle:
         """
 
         terminate = False
+        if self.debug == True:
+            print("particle::propagate Next event")
 
         self.nscatter = 0
         while terminate == False:
             #
             # intersection of track with cryostat
             #
-            intersections = self.intersect(self.cryostat)
+            cryostat_intersections = self.intersect(self.cryostat)
             #
             # do we intersect?
             #
-            if len(intersections) >= 1: # we have a track through the LXe cylinder.
+            if len(cryostat_intersections) > 0: # we have a track through the LXe cylinder.
+                #
+                # maximum path length before exiting the cryostat
+                #
+                s_max = cryostat_intersections[0]
+                fiducial_intersections = []
+                s_fiducial_entry = 0.0
+                s_max_fiducial = -1.0
+                #
+                # * determine the path length to the fiducial volume
+                #
+                # * only transport to the fiducial the first time.
+                #
+                if self.vrt == 'fiducial_scatter':
+
+                    if self.nscatter == 0: # transport to the fiducial volume
+                        if self.debug == True:
+                            print('particle::propagate VRT - transport to fiducial volume is ON')
+
+                        fiducial_intersections = self.intersect(self.fiducial)
+                        if len(fiducial_intersections) > 0:
+                            s_fiducial_entry = fiducial_intersections[0]
+                            s_fiducial_exit = fiducial_intersections[1]
+                            self.weight = self.weight*self.phys.get_att_probability(energy=self.energy,distance=s_fiducial_entry)
+                            self.update_particle('transport',s_fiducial_entry,0,0,1.0)
+                            #
+                            # we dont recalculate the interscetion point with the cryostat again. Just
+                            # calculate: s_max' = s_max - s_fiducial_entry
+                            #
+                            s_max = s_max - s_fiducial_entry
+                            s_max_fiducial = s_fiducial_exit-s_fiducial_entry
+                        else:
+                            terminate = True
+                            continue # jump out of while loop
+                    elif self.nscatter == self.nscatter_max:
+                        #
+                        # path length to the outside world
+                        #
+                        s_max = cryostat_intersections[0]
+                        #
+                        # probability to reach teh outside world
+                        #
+                        prob = self.phys.get_att_probability(energy=self.energy, distance=s_max)
+                        self.weight = self.weight*prob
+                        terminate = True
+                        continue
+
                 # 1. if one intersection this gives the exit point.
                 # 2. if two intersection this gives the entry point to a new volume (needed for fiducial)
                 #    volume variance reduction
-                s_max = intersections[0]
-                s_gen = self.generate_interaction_point()
+                # 3. s_max_fiducial is maximum path length in the fiducial volume. If no variance reduction
+                #    is done it is set to -1.0. In that case it is ignored inside the routine
+                s_gen = self.generate_interaction_point(smax=s_max_fiducial)
 
                 #
                 # do we have an interaction inside the cryostat?
@@ -219,7 +296,6 @@ class particle:
                     # actual scattering: either Compton or Photo-electric effect
                     #
                     process = self.scatter(s_gen)
-                    self.nscatter = self.nscatter+1
                     #
                     # if the scattering was by the Photo-electric effect, the photon is terminated
                     #
@@ -236,24 +312,39 @@ class particle:
                 #
                 terminate = True
 
+        if self.debug == True:
+            print('particle::propagate exit propagator')
+
         return
 
     def get_info(self, i):
-
+        data = []
 
 
         return data
 
-    @jit()
-    def generate_interaction_point(self):
+    def generate_interaction_point(self, **kwargs):
         """
         Propagate the particle to the next interaction location
-        :param phys: physics class object
+        :param kwargs: smax = maximum path length to generate (default = -1 -> infinite)
+
         :return:
         """
+
+        smax = kwargs.pop('smax',-1)
+
         # cdf for path length
         mu = self.phys.get_att(energy=self.energy)
-        r = np.random.uniform(0,1)
+
+        rmax = 1
+        if smax > 0.0:
+            rmax = 1.0 - np.exp(- smax / mu)
+            self.weight = self.weight*rmax
+
+        #
+        # generate the path length
+        #
+        r = np.random.uniform(0,rmax)
         L =  - np.log(1-r) * mu
 
         return L
@@ -271,26 +362,28 @@ class particle:
             #
             # Compton scatter
             #
-            theta_s, phi_s = self.phys.do_compton(self.energy)
-            self.update_particle('inc',s,theta_s, phi_s)
+            theta_s, phi_s, w_s = self.phys.do_compton(self.energy, self.edep_max)
+            self.update_particle('inc',s,theta_s, phi_s, w_s)
 
             # calculate teh energy deposit in the xenon
         else:
             #
             # Photo-electric effect
             #
-            self.update_particle('pho',s,None,None)
+            self.update_particle('pho',s,None,None,1.)
 
         return process
 
-    def update_particle(self, process, s_scatter, theta_scatter, phi_scatter):
+    def update_particle(self, process, s_scatter, theta_scatter, phi_scatter, w):
         """
         Update the particle properties after scattering
 
-        :param process:
+        :param process: ['inc', 'pho', 'transport']
         :param s_scatter:
         :param theta_scatter:
         :param phi_scatter:
+        :param w:
+
         :return:
         """
 
@@ -328,6 +421,8 @@ class particle:
             # calculate the deposited energy in this interaction
             #
             edep = self.energy - enew
+            self.edep_max = self.edep_max - edep
+
         elif process == 'pho':
             #
             # 2. Photo-electric effect
@@ -340,19 +435,26 @@ class particle:
             edep = self.energy
             t_new = [0,0,0]
 
+
         #
         # Overwrite particle parameters
         #
-        self.xint.append([x0_new, edep, process])
+        if process != 'transport':
+            self.xint.append([x0_new, edep, process])
+            self.direction = t_new
+            self.energy = enew
+            self.edep = self.edep + edep
+            self.nscatter = self.nscatter + 1
 
+        #
+        # always a new x0.....
+        #
         self.x0 = x0_new
-        self.direction = t_new
-        self.energy = enew
-        self.edep = self.edep+edep
+        self.weight = self.weight*w
+
 
         return
 
-    @jit()
     def select_scatter_process(self):
         """
         Select either Photo-electric or Compton based on relative cross section
@@ -366,12 +468,24 @@ class particle:
         sigma_inc = self.phys.get_sigma(process='inc',energy=E)
         frac = sigma_inc / sigma_total
 
-        r = np.random.uniform(0,1)
-        # # # print('stot = ',sigma_total,' sinc = ',sigma_inc,' frac = ',frac,' r= ',r)
-        if r < frac:
+        if self.edep_max < self.energy:
+            #
+            # if the maximum allowed energy deposit is lower than the energy of the particle, we switch off
+            # the photo-electric effect and we correct the particle weight:
+            #     weight = weight* (1-sigma_PE / sigma_tot) = weight * sigma_inc/sigma_tot
+            #
             process = 'inc'
+            self.weight = self.weight*frac
         else:
-            process = 'pho'
+            #
+            # choose incoherent or photo-electric effect based on their relative cross sections
+            #
+            r = np.random.uniform(0,1)
+            # # # print('stot = ',sigma_total,' sinc = ',sigma_inc,' frac = ',frac,' r= ',r)
+            if r < frac:
+                process = 'inc'
+            else:
+                process = 'pho'
 
         return process
 

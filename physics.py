@@ -130,7 +130,7 @@ class em_physics:
         elif process == "pp": # pair creation
             mu = np.interp(energy / 1e3,self.e,self.sigma_pp)
         else:
-            print('em_physics::get_att ERROR wrong process selected')
+            print('em_physics::get_sigma ERROR wrong process selected')
 
         return mu
 
@@ -147,6 +147,41 @@ class em_physics:
         mu = np.interp(energy / 1e3, self.e, self.sigma_att)
         return 1/ ( mu * self.rho)
 
+    def get_att_probability(self, **kwargs):
+        """
+        Get the probability for a particle of energy E, to travel distance dx
+
+        :return:
+        """
+        energy = kwargs.pop('energy',-1.0)
+        dx = kwargs.pop('distance',-1.0)
+
+        mu = self.get_att(energy=energy)
+
+        prob = np.exp(- dx/mu)
+        return prob
+
+    def calculate_cost_min(self, **kwargs):
+        """
+        Calculate the minimal scatter angle for a given maximum energy deposit
+
+        :param kwargs:
+                energy = photon energy (keV)
+                de_max = maximum energy deposit (keV)
+
+        :return: cos(theta)_min
+        """
+        energy = kwargs.pop('energy',-1)
+        de_max = kwargs.pop('de_max',-1)
+        if energy<0 | de_max<0:
+            print("physics::calculate_cost_min ERROR Bad energy or de_max. E=",energy," keV dE_max =",de_max," keV")
+
+        cost_min = 1.0 - self.m_electron*(1./(energy-de_max)-1./energy)
+
+        if cost_min < -1:
+            cost_min = -1.0
+
+        return cost_min
 
     def P(self,Eg,cost):
         """
@@ -173,7 +208,7 @@ class em_physics:
         :return: dsigma/dOmega
         """
 
-        formfactor = kwargs.pop('formfactor',True)
+        formfactor = kwargs.pop('formfactor', True)
         re2 = 0.07940775 # barn
 
         # Klein Nishina
@@ -198,24 +233,45 @@ class em_physics:
         """
         return np.interp(x,self.x,self.Sx)
 
-    def do_compton(self, energy):
-        # select the scatter angle
+    def do_compton(self, energy, de_max):
+        """
+        Select the Compton scattering angle based on the Klein-Nishina differential cross section
 
+        :param energy: gamma energy
+        :param de_max: maximum energy deposit
+        :return:
+        """
+
+        #
+        # if the energy deposit is unrestricted then cos(theta)_min = -1.0
+        #
+        cost_min = -1.0
+        rmin = 0.
+        weight = 1.0
+
+
+            
         #
         # make the cdf from the differential cross section
         #
         cost_range = np.linspace(-1.0, +1.0, 10001, endpoint=True)
-        dsigma = self.KleinNishina(energy, cost_range,formfactor=True)
+        dsigma = self.KleinNishina(energy, cost_range, formfactor=True)
         cdf = dsigma.cumsum() / dsigma.sum()
         #
         # draw a random number from the dsigma distribution to get scatter angle
         #
-        theta = np.arccos(np.interp(np.random.uniform(0., 1.), cdf, cost_range))
+        if de_max < energy:
+            cost_min = self.calculate_cost_min(energy=energy, de_max=de_max)
+            rmin = np.interp(cost_min, cost_range, cdf)
+
+        weight = 1 - rmin
+        # # # print('weight ..... =',weight,' rmin = ',rmin,' cost_min =',cost_min)
+        theta = np.arccos(np.interp(np.random.uniform(rmin, 1.), cdf, cost_range))
         #
         # random angle in phi between 0 and 2pi
         #
         phi = 2 * np.pi * np.random.uniform(0.1)
 
-        return theta, phi
+        return theta, phi, weight
 
 
