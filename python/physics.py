@@ -3,7 +3,7 @@ import numpy as np
 class em_physics:
     """
     The electromagnetic physics driver for the simulation
-    (routines routinely stole from https://github.com/ErikHogebirk/DMPlots)555555
+    (routines routinely stole from https://github.com/ErikHogebirk/DMPlots)
     """
 
     def __init__(self, **kwargs):
@@ -19,9 +19,9 @@ class em_physics:
         self.rc = 1.0  # reduced Compton wavelength rc=hbar/me/c
 
         # extract data from the NIST textfile
-        self.extract_nist('../data/xenon_cross_section/gamma_sigma.txt')
+        self.extract_nist('../FastMC/data/xenon_cross_section/gamma_sigma.txt')
         # extract data from the Hubbel form factor data
-        self.extract_formfactors('../data/xenon_cross_section/formfactors.txt')
+        self.extract_formfactors('../FastMC/data/xenon_cross_section/formfactors.txt')
 
         self.Z_xenon = 54
 
