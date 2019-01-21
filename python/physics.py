@@ -19,9 +19,9 @@ class em_physics:
         self.rc = 1.0  # reduced Compton wavelength rc=hbar/me/c
 
         # extract data from the NIST textfile
-        self.extract_nist('../FastMC/data/xenon_cross_section/gamma_sigma.txt')
+        self.extract_nist('../data/xenon_cross_section/gamma_sigma.txt')
         # extract data from the Hubbel form factor data
-        self.extract_formfactors('../FastMC/data/xenon_cross_section/formfactors.txt')
+        self.extract_formfactors('../data/xenon_cross_section/formfactors.txt')
 
         self.Z_xenon = 54
 
@@ -173,7 +173,8 @@ class em_physics:
         """
         energy = kwargs.pop('energy',-1)
         de_max = kwargs.pop('de_max',-1)
-        if energy<0 | de_max<0:
+
+        if (energy<0) | (de_max<0):
             print("physics::calculate_cost_min ERROR Bad energy or de_max. E=",energy," keV dE_max =",de_max," keV")
 
         cost_min = 1.0 - self.m_electron*(1./(energy-de_max)-1./energy)

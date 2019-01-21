@@ -268,6 +268,17 @@ class particle:
                         else:
                             terminate = True
                             continue # jump out of while loop
+                    elif (self.nscatter>0) & (self.nscatter<self.nscatter_max):
+                        #  multiple scatters as well!
+                        #  determine s to boundary of fiducial volume.... (we are already inside so we will find an intersection)
+                        fiducial_intersections = self.intersect(self.fiducial)
+                        if len(fiducial_intersections)>0:
+                            s_max_fiducial = fiducial_intersections[0]
+                        else:
+                            print("particle::propagate ERROR.... bad intersection. discard event.")
+                            terminate = True
+                            continue
+
                     elif self.nscatter == self.nscatter_max:
                         #
                         # path length to the outside world
