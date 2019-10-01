@@ -1,4 +1,6 @@
 import numpy as np
+import numba
+
 
 class em_physics:
     """
@@ -27,8 +29,7 @@ class em_physics:
 
         return
 
-
-    def extract_formfactors(self,fn):
+    def extract_formfactors(self, fn):
         """
         Extract the coherent and incoherent form factors
 
@@ -51,22 +52,23 @@ class em_physics:
 
         d = np.array(all_params)
 
-        self.x = d[:,0]
-        self.Fx = d[:,1]
-        self.Sx = d[:,2]
+        self.x = d[:, 0]
+        self.Fx = d[:, 1]
+        self.Sx = d[:, 2]
 
         return
 
+    ####@numba.njit
     def calculate_x(self, k, cost):
         """
         Calculate x
         :param k: gamma k factor E/me
         :return:
         """
-        x = 2*k*np.sqrt((1.-cost)/2.)*20.60774 # uit Hubbell paper
+        x = 2 * k * np.sqrt((1. - cost) / 2.) * 20.60774  # uit Hubbell paper
         return x
 
-    def extract_nist(self,fn):
+    def extract_nist(self, fn):
         """
         Extract the cross section and attenuation from the data file (stolen from Erik Hogenbirk)
 
@@ -90,8 +92,8 @@ class em_physics:
 
         d = np.array(all_params)
 
-        self.rho = 3.0 # gram/cm3
-        self.e = d[:, 0] # energy range
+        self.rho = 3.0  # gram/cm3
+        self.e = d[:, 0]  # energy range
         self.sigma_coh = d[:, 1]  # Coherent
         self.sigma_inc = d[:, 2]  # Incoherent. This is Compton scattering
         self.sigma_pho = d[:, 3]  # photoelectric absorption
@@ -115,26 +117,26 @@ class em_physics:
 
         :return: cross section in cm2/g
         """
-        process = kwargs.pop('process','att')
-        energy = kwargs.pop('energy',-1.0)
-        if energy<0:
-            print('emphysics::get_sigma ERROR wrong energy. E=',energy)
+        process = kwargs.pop('process', 'att')
+        energy = kwargs.pop('energy', -1.0)
+        if energy < 0:
+            print('emphysics::get_sigma ERROR wrong energy. E=', energy)
             return -1
 
         if process == "att":  # total cross section
             mu = np.interp(energy / 1e3, self.e, self.sigma_att)
-        elif process == "pho": # PE absorption
-            mu = np.interp(energy / 1e3,self.e,self.sigma_pho)
-        elif process == "inc": # Compton
-            mu = np.interp(energy / 1e3,self.e,self.sigma_inc)
-        elif process == "pp": # pair creation
-            mu = np.interp(energy / 1e3,self.e,self.sigma_pp)
+        elif process == "pho":  # PE absorption
+            mu = np.interp(energy / 1e3, self.e, self.sigma_pho)
+        elif process == "inc":  # Compton
+            mu = np.interp(energy / 1e3, self.e, self.sigma_inc)
+        elif process == "pp":  # pair creation
+            mu = np.interp(energy / 1e3, self.e, self.sigma_pp)
         else:
             print('em_physics::get_sigma ERROR wrong process selected')
 
         return mu
 
-    def get_att(self,**kwargs):
+    def get_att(self, **kwargs):
         """
         Calculate the attenuation length
 
@@ -142,10 +144,10 @@ class em_physics:
             E=energy of gamma in keV
         :return: attenuation length in cm
         """
-        energy = kwargs.pop('energy',-1.0)
+        energy = kwargs.pop('energy', -1.0)
 
         mu = np.interp(energy / 1e3, self.e, self.sigma_att)
-        return 1/ ( mu * self.rho)
+        return 1 / (mu * self.rho)
 
     def get_att_probability(self, **kwargs):
         """
@@ -153,12 +155,12 @@ class em_physics:
 
         :return:
         """
-        energy = kwargs.pop('energy',-1.0)
-        dx = kwargs.pop('distance',-1.0)
+        energy = kwargs.pop('energy', -1.0)
+        dx = kwargs.pop('distance', -1.0)
 
         mu = self.get_att(energy=energy)
 
-        prob = np.exp(- dx/mu)
+        prob = np.exp(- dx / mu)
         return prob
 
     def calculate_cost_min(self, **kwargs):
@@ -171,20 +173,20 @@ class em_physics:
 
         :return: cos(theta)_min
         """
-        energy = kwargs.pop('energy',-1)
-        de_max = kwargs.pop('de_max',-1)
+        energy = kwargs.pop('energy', -1)
+        de_max = kwargs.pop('de_max', -1)
 
-        if (energy<0) | (de_max<0):
-            print("physics::calculate_cost_min ERROR Bad energy or de_max. E=",energy," keV dE_max =",de_max," keV")
+        if (energy < 0) | (de_max < 0):
+            print("physics::calculate_cost_min ERROR Bad energy or de_max. E=", energy, " keV dE_max =", de_max, " keV")
 
-        cost_min = 1.0 - self.m_electron*(1./(energy-de_max)-1./energy)
+        cost_min = 1.0 - self.m_electron * (1. / (energy - de_max) - 1. / energy)
 
         if cost_min < -1:
             cost_min = -1.0
 
         return cost_min
 
-    def P(self,Eg,cost):
+    def P(self, Eg, cost):
         """
         Calculate the Eg'/Eg as a function of cos(theta), where
         Eg' is the gamma energy after Compton scatter
@@ -194,11 +196,11 @@ class em_physics:
         :return:
         """
 
-        P = 1./(1. + (Eg/self.m_electron)*(1-cost))
+        P = 1. / (1. + (Eg / self.m_electron) * (1 - cost))
 
         return P
 
-    def KleinNishina(self,Eg,cost,**kwargs):
+    def KleinNishina(self, Eg, cost, **kwargs):
         """
         Calculate the Klein-Nishina differential cross section for
         Compton scattering
@@ -210,29 +212,30 @@ class em_physics:
         """
 
         formfactor = kwargs.pop('formfactor', True)
-        re2 = 0.07940775 # barn
+        re2 = 0.07940775  # barn
 
         # Klein Nishina
         k = Eg / self.m_electron
-        FF = 1+k*(1.0 - cost)
-        KN = re2*(1.0 + cost**2 + k**2*(1-cost)**2/FF)/FF**2/2
+        FF = 1 + k * (1.0 - cost)
+        KN = re2 * (1.0 + cost ** 2 + k ** 2 * (1 - cost) ** 2 / FF) / FF ** 2 / 2
 
         # total differential cross section per atom scales with Z
         S = self.Z_xenon
         # correct with the form factor
         if formfactor == True:
-            x = self.calculate_x(k,cost)
+            x = self.calculate_x(k, cost)
             S = self.get_S(x)
 
-        return KN*S
+        return KN * S
 
+    ###@numba.njit
     def get_S(self, x):
         """
         Interpolate S(x)
         :param x:
         :return: S(x)
         """
-        return np.interp(x,self.x,self.Sx)
+        return np.interp(x, self.x, self.Sx)
 
     def do_compton(self, energy, de_max):
         """
@@ -250,8 +253,6 @@ class em_physics:
         rmin = 0.
         weight = 1.0
 
-
-            
         #
         # make the cdf from the differential cross section
         #
@@ -274,5 +275,3 @@ class em_physics:
         phi = 2 * np.pi * np.random.uniform(0.1)
 
         return theta, phi, weight
-
-

@@ -57,7 +57,7 @@ class particle:
         # generate the x0 and direction of the particle
         self.generate()
 
-    def print(self):
+    def Print(self):
         """
         Print particle
         :return:
@@ -177,6 +177,7 @@ class particle:
                     #
                     intersections[n] = s
                     n = n+1
+
         return intersections
 
     def intersect_with_plane(self, cylinder, type):
@@ -408,6 +409,8 @@ class particle:
         #
         t_new = [0,0,0]
         enew = 0
+        edep = 0
+
         if process == 'inc':
             #
             # 1. Compton scattering
@@ -432,7 +435,14 @@ class particle:
             # calculate the deposited energy in this interaction
             #
             edep = self.energy - enew
+            if edep<0:
+                edep = 0
+
             self.edep_max = self.edep_max - edep
+            
+            if self.edep_max<0:
+                self.edep_max = 0
+                #print("particle::update_particle WARNING edep_max=",self.edep_max," E = ",self.energy," E_new = ",enew)
 
         elif process == 'pho':
             #
@@ -491,12 +501,19 @@ class particle:
             #
             # choose incoherent or photo-electric effect based on their relative cross sections
             #
+
             r = np.random.uniform(0,1)
             # # # print('stot = ',sigma_total,' sinc = ',sigma_inc,' frac = ',frac,' r= ',r)
             if r < frac:
                 process = 'inc'
             else:
                 process = 'pho'
+
+            # If we require multiple scatters in the vrt MC we do not want to terminate the photon
+            # prematurely.
+            if (self.vrt == 'fiducial_scatter') and (self.nscatter < self.nscatter_max-1):
+                process = 'inc'
+                self.weight = self.weight * frac
 
         return process
 
