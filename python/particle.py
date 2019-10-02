@@ -22,6 +22,8 @@ class particle:
         """
         # # # print("particle::initialize")
 
+        #np.random.seed(123456)
+
         self.type = kwargs.pop('type', None)
         self.energy = kwargs.pop('energy', 0.0)
         self.phys = kwargs.pop('physics',None)

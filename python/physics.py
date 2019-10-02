@@ -15,6 +15,8 @@ class em_physics:
         :param kwargs:
         """
 
+        # np.random.seed(123456)
+
         # physical constants
         self.m_electron = 510.9989461  # keV
         self.alpha = 1.0  # fine structure constant
